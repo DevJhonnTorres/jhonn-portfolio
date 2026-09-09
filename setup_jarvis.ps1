@@ -2,10 +2,15 @@
 # Equivalente de setup_jarvis.sh, que es bash y no corre nativo en Windows.
 #
 # Uso (PowerShell):
-#   $env:DEEPSEEK_API_KEY="sk-..."
 #   $env:TELEGRAM_BOT_TOKEN="..."
 #   $env:TELEGRAM_ALLOWED_USERS="8184434996"
-#   .\setup_jarvis.ps1
+#   .\setup_jarvis.ps1                       # modelo gratis (opencode-free)
+#
+# Para seguir en DeepSeek (de pago):
+#   $env:JARVIS_PROVIDER="deepseek"; $env:DEEPSEEK_API_KEY="sk-..."
+#
+# Para cambiar solo el modelo, sin reprovisionar todo: .\setup_free_model.ps1
+# Detalle de las opciones gratis y sus limites: MODELOS_GRATIS.md
 #
 # Si Windows bloquea la ejecución:
 #   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
@@ -46,9 +51,29 @@ if (-not $HermesExe) {
     exit 1
 }
 
-if (-not $env:DEEPSEEK_API_KEY) {
-    Write-Host "[X] Falta DEEPSEEK_API_KEY" -ForegroundColor Red
+# Provider y modelo. El default es `opencode-free`: sin API key, sin cuenta y
+# sin costo. Ver MODELOS_GRATIS.md.
+$JarvisProvider = if ($env:JARVIS_PROVIDER) { $env:JARVIS_PROVIDER } else { "opencode-free" }
+$JarvisModel = if ($env:JARVIS_MODEL) {
+    $env:JARVIS_MODEL
+} elseif ($JarvisProvider -eq "opencode-free") {
+    "deepseek-v4-flash-free"
+} elseif ($JarvisProvider -eq "deepseek") {
+    "deepseek-v4-flash"
+} else {
+    ""
+}
+
+if ($JarvisProvider -eq "deepseek" -and -not $env:DEEPSEEK_API_KEY) {
+    Write-Host "[X] Falta DEEPSEEK_API_KEY (la pide el provider deepseek, que se cobra)" -ForegroundColor Red
     Write-Host '    $env:DEEPSEEK_API_KEY="sk-..."'
+    Write-Host '    O deja el default gratis: $env:JARVIS_PROVIDER="opencode-free"'
+    exit 1
+}
+
+if (-not $JarvisModel) {
+    Write-Host "[X] El provider '$JarvisProvider' no tiene modelo por defecto aca" -ForegroundColor Red
+    Write-Host '    $env:JARVIS_MODEL="<id>"'
     exit 1
 }
 
@@ -114,7 +139,7 @@ En Windows el home de Hermes es %LOCALAPPDATA%\hermes, NO %USERPROFILE%\.hermes.
 §
 Los .ps1 con acentos necesitan BOM UTF-8: Windows PowerShell 5.1 parsea sin BOM como Windows-1252 y corrompe los literales del script.
 §
-Modelo: deepseek-v4-flash con el provider nativo `deepseek`. La cuenta solo expone deepseek-v4-flash y deepseek-v4-pro; `deepseek-chat` ya no existe y devuelve error.
+Modelo por defecto: `opencode-free` (sin API key, sin costo), modelo deepseek-v4-flash-free; su catalogo rota, `hermes model` lista los vigentes. Con el provider `deepseek` (de pago) la cuenta solo expone deepseek-v4-flash y deepseek-v4-pro; `deepseek-chat` ya no existe. Cambiar de modelo: setup_free_model.ps1 / .sh.
 §
 El provider `custom` devuelve 401 contra DeepSeek aunque la credencial sea válida (manda otra clave). Usar siempre el provider nativo `deepseek`.
 §
@@ -167,11 +192,18 @@ Set-EnvLine "TELEGRAM_BOT_TOKEN"     $env:TELEGRAM_BOT_TOKEN
 Set-EnvLine "TELEGRAM_ALLOWED_USERS" $env:TELEGRAM_ALLOWED_USERS
 
 # --- Modelo, memoria y personalidad --------------------------------------
-# Modelos disponibles en la cuenta: deepseek-v4-flash y deepseek-v4-pro.
-# OJO: "deepseek-chat" ya no existe y devuelve error.
-& $HermesExe config set model.provider deepseek
-& $HermesExe config set model.default "deepseek-v4-flash"
-& $HermesExe config set model.base_url "https://api.deepseek.com/v1"
+# `opencode-free` no pide credencial y su catalogo lo sirve OpenCode en vivo,
+# asi que los ids rotan: si falla, `hermes model` lista los vigentes.
+# Con el provider deepseek: la cuenta solo expone deepseek-v4-flash y
+# deepseek-v4-pro; "deepseek-chat" ya no existe y devuelve error.
+& $HermesExe config set model.provider $JarvisProvider
+& $HermesExe config set model.default $JarvisModel
+# base_url vacio salvo en deepseek: si queda apuntando a api.deepseek.com, pisa
+# el endpoint propio de cualquier otro provider y el cambio no surte efecto.
+# Se escribe en el YAML mas abajo (bloque de control de costo) y no con
+# `hermes config set`, porque PowerShell 5.1 no pasa de forma fiable un
+# argumento vacio a un ejecutable nativo.
+$JarvisBaseUrl = if ($JarvisProvider -eq "deepseek") { "https://api.deepseek.com/v1" } else { "" }
 & $HermesExe config set memory.memory_enabled true
 & $HermesExe config set memory.user_profile_enabled true
 & $HermesExe config set agent.personalities.jarvis "Sos Jarvis, el primer agente de Praktil (Corporacion - Centro Colombiano de Tecnologias Digitales Convergentes Praktil, Centro de Desarrollo). Naciste el 9 de julio de 2026. Respondes siempre en espanol, salvo que te pidan explicitamente otro idioma." --force
@@ -199,6 +231,7 @@ import yaml, io
 p = r'$cfgPath'
 with io.open(p, encoding='utf-8') as f:
     c = yaml.safe_load(f) or {}
+c.setdefault('model', {})['base_url'] = r'$JarvisBaseUrl'
 c.setdefault('platform_toolsets', {})['telegram'] = [
     'terminal', 'file', 'web', 'skills', 'todo',
     'memory', 'vision', 'image_gen', 'tts', 'cronjob',
@@ -211,7 +244,7 @@ print('   toolsets de Telegram recortados (fuera: browser, session_search, deleg
 
 Write-Host ""
 Write-Host "[OK] Jarvis configurado" -ForegroundColor Green
-Write-Host "     Modelo:    deepseek-v4-flash (provider deepseek)"
+Write-Host "     Modelo:    $JarvisModel (provider $JarvisProvider)"
 Write-Host "     Identidad: $HermesHome\SOUL.md"
 Write-Host "     Memoria:   $HermesHome\memories\"
 Write-Host ""

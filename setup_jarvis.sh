@@ -8,8 +8,11 @@
 # memoria, perfil de usuario, modelo y credencial.
 #
 # Uso:
-#   export DEEPSEEK_API_KEY=sk-...
-#   ./setup_jarvis.sh
+#   ./setup_jarvis.sh                          # modelo gratis (opencode-free)
+#   JARVIS_PROVIDER=deepseek DEEPSEEK_API_KEY=sk-... ./setup_jarvis.sh
+#
+# Para cambiar sólo el modelo, sin reprovisionar todo: ./setup_free_model.sh
+# Detalle de las opciones gratis y sus límites: MODELOS_GRATIS.md
 
 set -euo pipefail
 
@@ -20,9 +23,26 @@ if ! command -v hermes >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ -z "${DEEPSEEK_API_KEY:-}" ]; then
-    echo "❌ Falta DEEPSEEK_API_KEY"
+# Provider y modelo. El default es `opencode-free`: sin API key, sin cuenta y
+# sin costo. Ver MODELOS_GRATIS.md; setup_free_model.sh cambia sólo esto,
+# sin reprovisionar identidad ni memoria.
+JARVIS_PROVIDER="${JARVIS_PROVIDER:-opencode-free}"
+case "$JARVIS_PROVIDER" in
+    opencode-free) JARVIS_MODEL="${JARVIS_MODEL:-deepseek-v4-flash-free}" ;;
+    deepseek)      JARVIS_MODEL="${JARVIS_MODEL:-deepseek-v4-flash}" ;;
+    *)             JARVIS_MODEL="${JARVIS_MODEL:-}" ;;
+esac
+
+if [ "$JARVIS_PROVIDER" = "deepseek" ] && [ -z "${DEEPSEEK_API_KEY:-}" ]; then
+    echo "❌ Falta DEEPSEEK_API_KEY (la pide el provider deepseek, que se cobra)"
     echo "   export DEEPSEEK_API_KEY=sk-..."
+    echo "   O dejá el default gratis: JARVIS_PROVIDER=opencode-free"
+    exit 1
+fi
+
+if [ -z "$JARVIS_MODEL" ]; then
+    echo "❌ El provider '$JARVIS_PROVIDER' no tiene modelo por defecto acá"
+    echo "   export JARVIS_MODEL=<id>"
     exit 1
 fi
 
@@ -77,7 +97,7 @@ SOUL
 cat > "$HERMES_HOME/memories/MEMORY.md" <<'MEM'
 Jarvis corre sobre Hermes Agent (motor local); su identidad de Praktil está en ~/.hermes/SOUL.md.
 §
-Modelo: deepseek-v4-flash con el provider nativo `deepseek`. La cuenta solo expone deepseek-v4-flash y deepseek-v4-pro; `deepseek-chat` ya no existe y devuelve error.
+Modelo por defecto: `opencode-free` (sin API key, sin costo), modelo deepseek-v4-flash-free; su catálogo rota, `hermes model` lista los vigentes. Con el provider `deepseek` (de pago) la cuenta solo expone deepseek-v4-flash y deepseek-v4-pro; `deepseek-chat` ya no existe. Cambiar de modelo: setup_free_model.ps1 / .sh.
 §
 El provider `custom` devuelve 401 contra DeepSeek aunque la credencial sea válida (manda otra clave). Usar siempre el provider nativo `deepseek`.
 §
@@ -112,10 +132,14 @@ USR
 touch "$HERMES_HOME/.env"
 chmod 600 "$HERMES_HOME/.env"
 
-if grep -q '^DEEPSEEK_API_KEY=' "$HERMES_HOME/.env"; then
-    sed -i "s|^DEEPSEEK_API_KEY=.*|DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}|" "$HERMES_HOME/.env"
-else
-    printf '\nDEEPSEEK_API_KEY=%s\n' "$DEEPSEEK_API_KEY" >> "$HERMES_HOME/.env"
+# Se guarda si está, aunque el provider activo sea gratis: así queda lista
+# para volver a DeepSeek o para usarla como respaldo.
+if [ -n "${DEEPSEEK_API_KEY:-}" ]; then
+    if grep -q '^DEEPSEEK_API_KEY=' "$HERMES_HOME/.env"; then
+        sed -i "s|^DEEPSEEK_API_KEY=.*|DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}|" "$HERMES_HOME/.env"
+    else
+        printf '\nDEEPSEEK_API_KEY=%s\n' "$DEEPSEEK_API_KEY" >> "$HERMES_HOME/.env"
+    fi
 fi
 
 # Telegram (opcional): habilita el gateway nativo, como corre Dorsha.
@@ -143,11 +167,35 @@ fi
 # ---------------------------------------------------------------------------
 # Modelo, memoria y personalidad
 # ---------------------------------------------------------------------------
-# Modelos disponibles en la cuenta: deepseek-v4-flash, deepseek-v4-pro.
-# OJO: "deepseek-chat" ya no existe y devuelve error.
-hermes config set model.provider deepseek
-hermes config set model.default "deepseek-v4-flash"
-hermes config set model.base_url "https://api.deepseek.com/v1"
+# `opencode-free` no pide credencial y su catálogo lo sirve OpenCode en vivo,
+# así que los ids rotan: si falla, `hermes model` lista los vigentes.
+# Con el provider deepseek: la cuenta sólo expone deepseek-v4-flash y
+# deepseek-v4-pro; "deepseek-chat" ya no existe y devuelve error.
+hermes config set model.provider "$JARVIS_PROVIDER"
+hermes config set model.default "$JARVIS_MODEL"
+
+# base_url vacío salvo en deepseek: si queda apuntando a api.deepseek.com, pisa
+# el endpoint propio de cualquier otro provider y el cambio no surte efecto.
+# Se escribe en el YAML y no con `hermes config set`, porque pasar un valor
+# vacío por línea de comandos no es fiable.
+if [ "$JARVIS_PROVIDER" = "deepseek" ]; then
+    JARVIS_BASE_URL="https://api.deepseek.com/v1"
+else
+    JARVIS_BASE_URL=""
+fi
+CFG="$HERMES_HOME/config.yaml" BASE_URL="$JARVIS_BASE_URL" python3 - <<'PYCFG' || \
+    echo "   ⚠️  No pude escribir model.base_url (¿falta PyYAML?). Revisalo a mano."
+import io, os, yaml
+p = os.environ["CFG"]
+try:
+    with io.open(p, encoding="utf-8") as f:
+        c = yaml.safe_load(f) or {}
+except FileNotFoundError:
+    c = {}
+c.setdefault("model", {})["base_url"] = os.environ["BASE_URL"]
+with io.open(p, "w", encoding="utf-8") as f:
+    yaml.safe_dump(c, f, allow_unicode=True, sort_keys=False)
+PYCFG
 
 hermes config set memory.memory_enabled true
 hermes config set memory.user_profile_enabled true
@@ -160,7 +208,7 @@ hermes config set display.personality jarvis
 echo
 echo "✅ Jarvis configurado"
 echo "   Motor:    Hermes Agent"
-echo "   Modelo:   deepseek-v4-flash (provider deepseek)"
+echo "   Modelo:   $JARVIS_MODEL (provider $JARVIS_PROVIDER)"
 echo "   Identidad: ~/.hermes/SOUL.md"
 echo "   Memoria:  ~/.hermes/memories/{MEMORY,USER}.md"
 echo
