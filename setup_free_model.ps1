@@ -12,12 +12,13 @@
 #
 # Variables opcionales:
 #   JARVIS_PROVIDER      opencode-free (default) | openrouter | nvidia |
-#                        deepseek | openai-api  (los dos ultimos, de pago)
+#                        deepseek | openai-api | anthropic  (los 3 ultimos, de pago)
 #   JARVIS_MODEL         id del modelo; si no, usa el default del provider
 #   JARVIS_FALLBACK_PAID 1 para dejar a DeepSeek (de pago) como ultimo respaldo
 #   OPENROUTER_API_KEY   requerido por el provider openrouter
 #   NVIDIA_API_KEY       requerido por el provider nvidia
 #   OPENAI_API_KEY       requerido por el provider openai-api
+#   ANTHROPIC_API_KEY    requerido por el provider anthropic
 #
 # Si Windows bloquea la ejecucion:
 #   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
@@ -64,6 +65,10 @@ $Catalog = @{
     # Esta aca solo para poder volver, y sin modelo por defecto a proposito:
     # el catalogo de la cuenta cambia y no se adivina.
     "openai-api"    = @{ Model = "";                                       KeyVar = "OPENAI_API_KEY" }
+    # Anthropic tampoco tiene capa gratuita, y es el mas caro de la lista:
+    # Opus 4.8 cuesta US$5 por millon de tokens de entrada. Ver MODELOS_GRATIS.md
+    # para lo que sale un mensaje de Telegram con los prompts de Hermes.
+    "anthropic"     = @{ Model = "";                                       KeyVar = "ANTHROPIC_API_KEY" }
 }
 
 $Provider = if ($env:JARVIS_PROVIDER) { $env:JARVIS_PROVIDER } else { "opencode-free" }

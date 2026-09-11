@@ -13,12 +13,13 @@
 #
 # Variables opcionales:
 #   JARVIS_PROVIDER      opencode-free (default) | openrouter | nvidia |
-#                        deepseek | openai-api  (los dos últimos, de pago)
+#                        deepseek | openai-api | anthropic  (los 3 últimos, de pago)
 #   JARVIS_MODEL         id del modelo; si no, usa el default del provider
 #   JARVIS_FALLBACK_PAID 1 para dejar a DeepSeek (de pago) como último respaldo
 #   OPENROUTER_API_KEY   requerido por el provider openrouter
 #   NVIDIA_API_KEY       requerido por el provider nvidia
 #   OPENAI_API_KEY       requerido por el provider openai-api
+#   ANTHROPIC_API_KEY    requerido por el provider anthropic
 
 set -euo pipefail
 
@@ -65,9 +66,13 @@ case "$PROVIDER" in
     # Está acá sólo para poder volver, y sin modelo por defecto a propósito —
     # el catálogo de la cuenta cambia y no se adivina.
     openai-api)    DEFAULT_MODEL="";                                       KEY_VAR="OPENAI_API_KEY" ;;
+    # Anthropic tampoco tiene capa gratuita, y es el más caro de la lista:
+    # Opus 4.8 cuesta US$5 por millón de tokens de entrada. Ver MODELOS_GRATIS.md
+    # para lo que sale un mensaje de Telegram con los prompts de Hermes.
+    anthropic)     DEFAULT_MODEL="";                                       KEY_VAR="ANTHROPIC_API_KEY" ;;
     *)
         echo "❌ Provider desconocido: $PROVIDER"
-        echo "   Válidos: opencode-free, openrouter, nvidia, deepseek, openai-api"
+        echo "   Válidos: opencode-free, openrouter, nvidia, deepseek, openai-api, anthropic"
         exit 1 ;;
 esac
 

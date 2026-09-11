@@ -118,12 +118,13 @@ Después reiniciá el gateway para que Telegram tome el modelo nuevo.
 
 | Variable | Para qué |
 |---|---|
-| `JARVIS_PROVIDER` | `opencode-free` (default), `openrouter`, `nvidia`, `deepseek`, `openai-api` |
+| `JARVIS_PROVIDER` | `opencode-free` (default), `openrouter`, `nvidia`, `deepseek`, `openai-api`, `anthropic` |
 | `JARVIS_MODEL` | Forzar un id de modelo distinto al default del provider |
 | `JARVIS_FALLBACK_PAID` | `1` deja a DeepSeek (de pago) como último respaldo |
 | `OPENROUTER_API_KEY` | Necesaria para el provider/respaldo `openrouter` |
 | `NVIDIA_API_KEY` | Necesaria para el provider/respaldo `nvidia` |
 | `OPENAI_API_KEY` | Necesaria para el provider `openai-api` |
+| `ANTHROPIC_API_KEY` | Necesaria para el provider `anthropic` |
 
 Por defecto **el respaldo de pago está apagado**: si los gratis fallan, Jarvis
 falla, en vez de gastar sin avisar. Si preferís que responda igual:
@@ -138,7 +139,7 @@ $env:JARVIS_FALLBACK_PAID="1"; .\setup_free_model.ps1
 $env:JARVIS_PROVIDER="deepseek"; .\setup_free_model.ps1
 ```
 
-`deepseek` y `openai-api` son los dos de pago. `openai-api` no trae modelo por
+`deepseek`, `openai-api` y `anthropic` son los de pago. `openai-api` no trae modelo por
 defecto —el catálogo de cada cuenta cambia y no se adivina—, así que pide
 `JARVIS_MODEL`; `hermes model` lista los tuyos.
 
@@ -157,6 +158,7 @@ su key está en el `.env`. No mete a OpenAI: sería volver al problema.
 | **Groq** | $0 con key | 14.400 req/día, pero **6.000 tokens/min** | ❌ El prompt de Hermes (~12k tokens) no entra en 1 minuto |
 | **Gemini free tier** | $0 con key | 1.000 req/día en Flash-Lite | ❌ La doc de Hermes lo desaconseja: "las keys de capa gratuita se agotan tras un puñado de turnos" |
 | **OpenAI** | Créditos de prueba | Caducan a los 30–90 días; no hay capa gratuita | ❌ Es una cuenta regresiva, no un plan |
+| **Anthropic** | De pago | Sin capa gratuita; Opus 4.8 a $5/$25 por 1M | ❌ El más caro: ~$0,39 por mensaje de 5 llamadas |
 | **Ollama / LM Studio local** | $0, ilimitado | Tu GPU/RAM | ✅ Si la PC aguanta un modelo con tool-calling |
 
 Dos cosas que conviene tener claras:
@@ -177,6 +179,56 @@ Modelos `:free` de OpenRouter con tool-calling verificados contra su API el
 herramientas.
 
 ---
+
+## Ojo con `/model` de Hermes
+
+Cambiar el modelo desde el chat con `/model` tiene tres trampas.
+
+**1. Es sólo de sesión.** Si el output termina en `session only — add --global to
+persist`, el cambio muere con esa sesión. El gateway que atiende Telegram es
+otro proceso: no se entera. Para que valga, `--global` o los scripts de acá.
+
+**2. Anthropic no es gratis, y es el más caro de la lista.** Claude Opus 4.8
+cuesta **US$5 por millón de tokens de entrada** y US$25 de salida. Con los
+prompts que Hermes ya arrastra (~45 KB por llamada, medidos en el commit
+`8d62aba`), eso es ~11.600 tokens de entrada **por llamada**:
+
+| Mensaje de Telegram | Costo aproximado |
+|---|---|
+| 1 llamada | $0,08 |
+| 5 llamadas | $0,39 |
+| 10 llamadas | $0,78 |
+| 20 llamadas (el tope de `max_turns`) | $1,56 |
+
+Cien mensajes al día con 5 llamadas cada uno son **~US$39 por día**. Para
+comparar: DeepSeek v4 Flash estaba en centavos al mes. Pasar de OpenAI a
+Anthropic no resuelve el problema del saldo — lo multiplica.
+
+**3. El warning significa que no se verificó nada.** "could not verify … against
+this endpoint's model listing" quiere decir que el nombre del modelo se aceptó
+**sin comprobar**. La API de Anthropic sí implementa `GET /v1/models`, así que si
+esa comprobación falló, lo más probable es que `base_url` no esté apuntando a
+Anthropic sino a un resto de la configuración anterior:
+
+```powershell
+hermes config get model.base_url
+```
+
+Si ahí aparece `api.openai.com` o `api.deepseek.com`, ése es el bug: ese valor
+pisa el endpoint del provider nuevo. Los scripts de acá lo limpian solos.
+
+Y como no se verificó, ese "Model switched" no prueba que funcione: la primera
+llamada real es la prueba.
+
+Si igual querés Claude en Jarvis, los ids válidos son `claude-opus-5` ($5/$25),
+`claude-sonnet-5` ($2/$10) y `claude-haiku-4-5` ($1/$5) — Haiku es el único que
+se acerca a razonable para un bot de chat, y aun así no es gratis:
+
+```powershell
+$env:JARVIS_PROVIDER="anthropic"; $env:JARVIS_MODEL="claude-haiku-4-5"
+$env:ANTHROPIC_API_KEY="sk-ant-..."
+.\setup_free_model.ps1
+```
 
 ## "Provider authentication failed"
 
