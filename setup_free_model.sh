@@ -12,11 +12,13 @@
 #   JARVIS_PROVIDER=deepseek   ./setup_free_model.sh   # volver a pago
 #
 # Variables opcionales:
-#   JARVIS_PROVIDER      opencode-free (default) | openrouter | nvidia | deepseek
+#   JARVIS_PROVIDER      opencode-free (default) | openrouter | nvidia |
+#                        deepseek | openai-api  (los dos últimos, de pago)
 #   JARVIS_MODEL         id del modelo; si no, usa el default del provider
 #   JARVIS_FALLBACK_PAID 1 para dejar a DeepSeek (de pago) como último respaldo
 #   OPENROUTER_API_KEY   requerido por el provider openrouter
 #   NVIDIA_API_KEY       requerido por el provider nvidia
+#   OPENAI_API_KEY       requerido por el provider openai-api
 
 set -euo pipefail
 
@@ -59,13 +61,24 @@ case "$PROVIDER" in
     openrouter)    DEFAULT_MODEL="nvidia/nemotron-3-super-120b-a12b:free"; KEY_VAR="OPENROUTER_API_KEY" ;;
     nvidia)        DEFAULT_MODEL="nvidia/nemotron-3-super-120b-a12b";      KEY_VAR="NVIDIA_API_KEY" ;;
     deepseek)      DEFAULT_MODEL="deepseek-v4-flash";                      KEY_VAR="DEEPSEEK_API_KEY" ;;
+    # OpenAI no tiene capa gratuita real: son créditos de prueba que caducan.
+    # Está acá sólo para poder volver, y sin modelo por defecto a propósito —
+    # el catálogo de la cuenta cambia y no se adivina.
+    openai-api)    DEFAULT_MODEL="";                                       KEY_VAR="OPENAI_API_KEY" ;;
     *)
         echo "❌ Provider desconocido: $PROVIDER"
-        echo "   Válidos: opencode-free, openrouter, nvidia, deepseek"
+        echo "   Válidos: opencode-free, openrouter, nvidia, deepseek, openai-api"
         exit 1 ;;
 esac
 
 MODEL="${JARVIS_MODEL:-$DEFAULT_MODEL}"
+
+if [ -z "$MODEL" ]; then
+    echo "❌ El provider '$PROVIDER' no tiene modelo por defecto acá"
+    echo "   Corré 'hermes model' para ver los de tu cuenta, y después:"
+    echo "   JARVIS_MODEL=<id> JARVIS_PROVIDER=$PROVIDER ./setup_free_model.sh"
+    exit 1
+fi
 
 touch "$ENV_FILE"
 chmod 600 "$ENV_FILE"

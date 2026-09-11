@@ -18,9 +18,27 @@ PC con Windows, y Hermes ya trae adentro lo que el router hace por fuera —
 elegir proveedor, cambiar de modelo y encadenar respaldos. No hace falta
 instalar nada nuevo: hay que **reconfigurarlo**.
 
-Y un detalle: los créditos que se están yendo no son de ChatGPT. `setup_jarvis.ps1`
-dejaba a Jarvis en el provider `deepseek` con el modelo `deepseek-v4-flash`. Lo
-que se vacía es el saldo de **DeepSeek**.
+### ¿Qué proveedor está activo?
+
+El `config.yaml` de Hermes vive en la PC (`%LOCALAPPDATA%\hermes`), no en el
+repo, así que lo que diga `setup_jarvis.ps1` puede no ser lo que está corriendo.
+Para saberlo:
+
+```powershell
+hermes config get model.provider
+hermes config get model.default
+```
+
+`setup_jarvis.ps1` provisiona `deepseek`; si alguien lo cambió a mano a
+`openai-api`, el gasto es de OpenAI. Da igual para el arreglo: los scripts de
+acá **pisan** el proveedor activo, sea cual sea.
+
+Ojo con OpenAI en particular: **no tiene capa gratuita de API**. Lo que dan son
+créditos de prueba que caducan (US$5–15 según la promo, a los 30–90 días), más
+un programa opcional de tokens diarios a cambio de compartir tu tráfico para
+entrenamiento. O sea que "está en free" ahí es una cuenta regresiva, no un
+plan: por mucho que recortes el consumo, se acaba igual. Por eso el default de
+este repo pasó a `opencode-free`, que sí es gratis de forma sostenida.
 
 ---
 
@@ -74,11 +92,12 @@ Después reiniciá el gateway para que Telegram tome el modelo nuevo.
 
 | Variable | Para qué |
 |---|---|
-| `JARVIS_PROVIDER` | `opencode-free` (default), `openrouter`, `nvidia`, `deepseek` |
+| `JARVIS_PROVIDER` | `opencode-free` (default), `openrouter`, `nvidia`, `deepseek`, `openai-api` |
 | `JARVIS_MODEL` | Forzar un id de modelo distinto al default del provider |
 | `JARVIS_FALLBACK_PAID` | `1` deja a DeepSeek (de pago) como último respaldo |
 | `OPENROUTER_API_KEY` | Necesaria para el provider/respaldo `openrouter` |
 | `NVIDIA_API_KEY` | Necesaria para el provider/respaldo `nvidia` |
+| `OPENAI_API_KEY` | Necesaria para el provider `openai-api` |
 
 Por defecto **el respaldo de pago está apagado**: si los gratis fallan, Jarvis
 falla, en vez de gastar sin avisar. Si preferís que responda igual:
@@ -93,6 +112,13 @@ $env:JARVIS_FALLBACK_PAID="1"; .\setup_free_model.ps1
 $env:JARVIS_PROVIDER="deepseek"; .\setup_free_model.ps1
 ```
 
+`deepseek` y `openai-api` son los dos de pago. `openai-api` no trae modelo por
+defecto —el catálogo de cada cuenta cambia y no se adivina—, así que pide
+`JARVIS_MODEL`; `hermes model` lista los tuyos.
+
+El respaldo de pago (`JARVIS_FALLBACK_PAID=1`) sólo engancha DeepSeek, y sólo si
+su key está en el `.env`. No mete a OpenAI: sería volver al problema.
+
 ---
 
 ## Las opciones gratis, con los números reales
@@ -104,6 +130,7 @@ $env:JARVIS_PROVIDER="deepseek"; .\setup_free_model.ps1
 | **NVIDIA NIM** | $0 con key | Créditos gratis al registrarte, sin tarjeta | ✅ Buen respaldo |
 | **Groq** | $0 con key | 14.400 req/día, pero **6.000 tokens/min** | ❌ El prompt de Hermes (~12k tokens) no entra en 1 minuto |
 | **Gemini free tier** | $0 con key | 1.000 req/día en Flash-Lite | ❌ La doc de Hermes lo desaconseja: "las keys de capa gratuita se agotan tras un puñado de turnos" |
+| **OpenAI** | Créditos de prueba | Caducan a los 30–90 días; no hay capa gratuita | ❌ Es una cuenta regresiva, no un plan |
 | **Ollama / LM Studio local** | $0, ilimitado | Tu GPU/RAM | ✅ Si la PC aguanta un modelo con tool-calling |
 
 Dos cosas que conviene tener claras:
@@ -176,3 +203,4 @@ no usar npm.
 - [OpenRouter — rate limits](https://openrouter.ai/docs/api-reference/limits) — 20 req/min, 50 o 1.000 req/día
 - [claude-code-router](https://github.com/musistudio/claude-code-router) — instalación y flujo de la UI
 - [Groq free tier](https://tokenmix.ai/blog/groq-free-tier-limits-2026) — 30 RPM, 6.000 TPM, 14.400 req/día
+- [OpenAI free tier](https://www.aicredits.co/en/ai/openai-free-tier-2026) — créditos de prueba que caducan, sin capa gratuita permanente

@@ -11,11 +11,13 @@
 #   $env:JARVIS_PROVIDER="deepseek";   .\setup_free_model.ps1   # volver a pago
 #
 # Variables opcionales:
-#   JARVIS_PROVIDER      opencode-free (default) | openrouter | nvidia | deepseek
+#   JARVIS_PROVIDER      opencode-free (default) | openrouter | nvidia |
+#                        deepseek | openai-api  (los dos ultimos, de pago)
 #   JARVIS_MODEL         id del modelo; si no, usa el default del provider
 #   JARVIS_FALLBACK_PAID 1 para dejar a DeepSeek (de pago) como ultimo respaldo
 #   OPENROUTER_API_KEY   requerido por el provider openrouter
 #   NVIDIA_API_KEY       requerido por el provider nvidia
+#   OPENAI_API_KEY       requerido por el provider openai-api
 #
 # Si Windows bloquea la ejecucion:
 #   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
@@ -58,6 +60,10 @@ $Catalog = @{
     "openrouter"    = @{ Model = "nvidia/nemotron-3-super-120b-a12b:free"; KeyVar = "OPENROUTER_API_KEY" }
     "nvidia"        = @{ Model = "nvidia/nemotron-3-super-120b-a12b";      KeyVar = "NVIDIA_API_KEY" }
     "deepseek"      = @{ Model = "deepseek-v4-flash";                      KeyVar = "DEEPSEEK_API_KEY" }
+    # OpenAI no tiene capa gratuita real: son creditos de prueba que caducan.
+    # Esta aca solo para poder volver, y sin modelo por defecto a proposito:
+    # el catalogo de la cuenta cambia y no se adivina.
+    "openai-api"    = @{ Model = "";                                       KeyVar = "OPENAI_API_KEY" }
 }
 
 $Provider = if ($env:JARVIS_PROVIDER) { $env:JARVIS_PROVIDER } else { "opencode-free" }
@@ -68,6 +74,13 @@ if (-not $Catalog.ContainsKey($Provider)) {
 }
 $Entry = $Catalog[$Provider]
 $Model = if ($env:JARVIS_MODEL) { $env:JARVIS_MODEL } else { $Entry.Model }
+
+if (-not $Model) {
+    Write-Host "[X] El provider '$Provider' no tiene modelo por defecto aca" -ForegroundColor Red
+    Write-Host "    Corre 'hermes model' para ver los de tu cuenta, y despues:"
+    Write-Host "    `$env:JARVIS_MODEL=`"<id>`"; .\setup_free_model.ps1"
+    exit 1
+}
 
 # --- Credencial, si el provider la pide ----------------------------------
 $EnvFile = Join-Path $HermesHome ".env"
