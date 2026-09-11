@@ -73,6 +73,33 @@ esac
 
 MODEL="${JARVIS_MODEL:-$DEFAULT_MODEL}"
 
+# `opencode-free` sólo es realmente keyless desde Hermes v0.20.5. En versiones
+# anteriores Hermes le pide credencial igual, y el síntoma no dice "actualizá":
+# dice "Provider authentication failed", que manda a buscar una key que no
+# existe. Se avisa acá, antes de tocar la config.
+if [ "$PROVIDER" = "opencode-free" ]; then
+    ver_raw="$(hermes version 2>/dev/null | head -5 || true)"
+    ver_ok="$(HV="$ver_raw" "$PY" -c '
+import os, re, sys
+m = re.search(r"v?(\d+)\.(\d+)\.(\d+)", os.environ.get("HV", ""))
+if not m:
+    print("unknown")
+else:
+    print("old" if tuple(map(int, m.groups())) < (0, 20, 5) else "ok")
+')"
+    if [ "$ver_ok" = "old" ]; then
+        echo "❌ Tu Hermes es anterior a v0.20.5 y ahí opencode-free todavía pide"
+        echo "   credencial. Da 'Provider authentication failed' aunque no haya"
+        echo "   ninguna key que poner. Actualizá primero:"
+        echo "     hermes update"
+        echo "   Instalado: $(printf '%s' "$ver_raw" | head -1)"
+        exit 1
+    elif [ "$ver_ok" = "unknown" ]; then
+        echo "   ⚠️  No pude leer la versión de Hermes. opencode-free necesita v0.20.5+;"
+        echo "      si falla la autenticación, corré 'hermes update'."
+    fi
+fi
+
 if [ -z "$MODEL" ]; then
     echo "❌ El provider '$PROVIDER' no tiene modelo por defecto acá"
     echo "   Corré 'hermes model' para ver los de tu cuenta, y después:"

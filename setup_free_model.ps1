@@ -75,6 +75,31 @@ if (-not $Catalog.ContainsKey($Provider)) {
 $Entry = $Catalog[$Provider]
 $Model = if ($env:JARVIS_MODEL) { $env:JARVIS_MODEL } else { $Entry.Model }
 
+# `opencode-free` solo es realmente keyless desde Hermes v0.20.5. En versiones
+# anteriores Hermes le pide credencial igual, y el sintoma no dice "actualiza":
+# dice "Provider authentication failed", que manda a buscar una key que no
+# existe. Se avisa aca, antes de tocar la config.
+if ($Provider -eq "opencode-free") {
+    $prevEapVer = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $verRaw = (& $HermesExe version 2>&1 | Out-String)
+    $ErrorActionPreference = $prevEapVer
+    $m = [regex]::Match($verRaw, 'v?(\d+)\.(\d+)\.(\d+)')
+    if ($m.Success) {
+        $have = [version]("{0}.{1}.{2}" -f $m.Groups[1].Value, $m.Groups[2].Value, $m.Groups[3].Value)
+        if ($have -lt [version]"0.20.5") {
+            Write-Host "[X] Tu Hermes es $have y opencode-free recien es keyless en v0.20.5." -ForegroundColor Red
+            Write-Host "    Antes de eso pide credencial y da 'Provider authentication failed'"
+            Write-Host "    aunque no haya ninguna key que poner. Actualiza primero:"
+            Write-Host "      hermes update"
+            exit 1
+        }
+    } else {
+        Write-Host "   [!] No pude leer la version de Hermes. opencode-free necesita v0.20.5+;"
+        Write-Host "       si falla la autenticacion, corre 'hermes update'."
+    }
+}
+
 if (-not $Model) {
     Write-Host "[X] El provider '$Provider' no tiene modelo por defecto aca" -ForegroundColor Red
     Write-Host "    Corre 'hermes model' para ver los de tu cuenta, y despues:"

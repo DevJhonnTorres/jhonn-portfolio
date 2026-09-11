@@ -152,6 +152,46 @@ herramientas.
 
 ---
 
+## "Provider authentication failed"
+
+Casi siempre es una de estas tres, en este orden:
+
+**1. Hermes viejo.** `opencode-free` recién es *keyless de verdad* en **v0.20.5**.
+En versiones anteriores Hermes le pide credencial igual, y el error no dice
+"actualizá" — dice que falló la autenticación, y te manda a buscar una key que
+no existe. `HERMES_INSTALLATION.md` de este repo documenta una v0.20.0, así que
+es el sospechoso número uno:
+
+```powershell
+hermes version
+hermes update
+```
+
+Los scripts ahora comprueban esto antes de tocar nada y te frenan con el mensaje
+correcto.
+
+**2. El cambio no llegó a aplicarse.** Si `hermes config set model.provider`
+rechazó el valor (provider desconocido en tu versión), seguís en el proveedor de
+antes con su key muerta. Comprobalo:
+
+```powershell
+hermes config get model.provider
+hermes config get model.default
+```
+
+Si ahí no dice `opencode-free`, el cambio no entró.
+
+**3. Saltó un respaldo con la key vencida.** `fallback_providers` se dispara con
+rate limits y 5xx, y si el respaldo tiene credencial muerta, el error que ves es
+el del respaldo, no el del principal:
+
+```powershell
+hermes fallback list
+```
+
+Y en todos los casos, el log crudo del gateway es el que manda — dice qué
+proveedor concreto devolvió el 401.
+
 ## Si aun así se te va el saldo
 
 Bajar el consumo pesa más que cambiar de proveedor. Lo grande ya está aplicado
