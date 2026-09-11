@@ -18,6 +18,32 @@ PC con Windows, y Hermes ya trae adentro lo que el router hace por fuera —
 elegir proveedor, cambiar de modelo y encadenar respaldos. No hace falta
 instalar nada nuevo: hay que **reconfigurarlo**.
 
+## El camino corto: un solo comando
+
+Si no querés diagnosticar nada:
+
+```powershell
+cd C:\ruta\a\Jarvis-IA
+git pull
+.\arreglar_jarvis.ps1
+```
+
+Hace solo todo lo que si no habría que hacer a mano: te dice en qué proveedor
+estás, actualiza Hermes si es anterior a v0.20.5, prueba los proveedores gratis
+en orden con una llamada real y se queda con el primero que responda, deja los
+que sobraron como cadena de respaldo, y **si ninguno anda restaura la
+configuración original** en vez de dejarte el bot mudo.
+
+En Linux es `./arreglar_jarvis.sh`. Con `JARVIS_NO_UPDATE=1` no toca la versión
+de Hermes.
+
+Lo único que queda para vos es reiniciar el gateway al final: el script corre en
+tu sesión, no en la tarea programada que atiende Telegram.
+
+El resto de este documento es el porqué, y qué hacer si el camino corto falla.
+
+---
+
 ### ¿Qué proveedor está activo?
 
 El `config.yaml` de Hermes vive en la PC (`%LOCALAPPDATA%\hermes`), no en el
